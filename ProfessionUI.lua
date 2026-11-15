@@ -25,6 +25,23 @@ local function NodeData(node)
 	return node.data or node
 end
 
+-- Blizzard's gamepad UI crafts from a hold timer, not from the button press, and the client only allows
+-- that from untainted code. An addon that re-orders or trims Blizzard's recipe list taints the rows, then
+-- the recipe picked from them, then the craft: holding Create does nothing and the client reports
+-- "CraftProfit tried to call the protected function". So while the gamepad UI is on, the list is left
+-- exactly as Blizzard built it. Mouse and keyboard are not affected (a click is a hardware event).
+local function GamepadUI()
+	return (InputUtil and type(InputUtil.IsGamepadUIEnabled) == "function" and InputUtil.IsGamepadUIEnabled()) and true or false
+end
+UI.GamepadUI = GamepadUI
+
+local gamepadNoted
+local function NoteGamepad(what)
+	if gamepadNoted or not GamepadUI() then return end
+	gamepadNoted = true
+	CP:Print("%s is saved, but stays off while the gamepad UI is on: changing Blizzard's recipe list would stop hold-to-craft from working.", what)
+end
+
 local function Muted(text) return CP:Color(C.muted, text) end
 local function Body(text) return CP:Color(C.body, text) end
 local function Gray(text) return CP:Color(C.gray, text) end
@@ -1258,7 +1275,7 @@ end
 -- Applies (or removes) the profit order on a recipe list data provider. Returns true when it re-sorted.
 function UI:ApplySort(dataProvider)
 	if not dataProvider or type(dataProvider.EnumerateEntireRange) ~= "function" then return false end
-	local want = CP.settings.sortByProfit and true or false
+	local want = CP.settings.sortByProfit and not GamepadUI() and true or false
 	local changed = false
 	local ok, err = pcall(function()
 		local nodes = {}
@@ -1299,6 +1316,7 @@ end
 function UI:SetSortByProfit(enabled)
 	CP.settings.sortByProfit = enabled and true or false
 	CP.touched.sortByProfit = true -- keep the choice if a late-loaded database is adopted
+	if enabled then NoteGamepad("Sort by profit") end
 	self:ResortList()
 	local form = ProfessionsFrame and ProfessionsFrame.CraftingPage and ProfessionsFrame.CraftingPage.SchematicForm
 	if form and form.cpPanel then form.cpPanel.SortCheck:SetChecked(CP.settings.sortByProfit) end
@@ -1389,7 +1407,7 @@ end
 -- Applies (or removes) the filter on a recipe list data provider. Returns true when the visible rows changed.
 function UI:ApplyFilter(dataProvider)
 	if not dataProvider then return false end
-	local want = CP.settings.profitableOnly and true or false
+	local want = CP.settings.profitableOnly and not GamepadUI() and true or false
 	if not want and hiddenFor ~= dataProvider then return false end
 	if type(dataProvider.GetRootNode) ~= "function" then return false end
 	local changed = false
@@ -1451,6 +1469,7 @@ end
 function UI:SetProfitableOnly(enabled)
 	CP.settings.profitableOnly = enabled and true or false
 	CP.touched.profitableOnly = true -- keep the choice if a late-loaded database is adopted
+	if enabled then NoteGamepad("Profitable only") end
 	self:RefilterList()
 	CP:Fire("FILTER_CHANGED", CP.settings.profitableOnly)
 end
