@@ -687,8 +687,22 @@ local function SettlePanel(p, form, anchor)
 end
 UI.SettlePanel = SettlePanel
 
+-- Blizzard's gamepad navigation (SmartNavigation) treats every Button under the profession window as a place
+-- the D-pad can go, ours included: from the recipe list "down" then lands on the panel's checkboxes instead
+-- of the next recipe. SmartNavigation_MarkFrameIgnored is Blizzard's own switch for that (it uses it on
+-- Create and Create All); it covers the frame's children and is safe from addon code out of combat.
+-- The same choices stay reachable on a gamepad in the Filter menu and through /cf.
+local function SkipInGamepadNav(frame)
+	if not frame or frame.cpPadSkipped or type(SmartNavigation_MarkFrameIgnored) ~= "function" then return end
+	if InCombatLockdown and InCombatLockdown() then return end -- tried again the next time a recipe is shown
+	if pcall(SmartNavigation_MarkFrameIgnored, frame) then frame.cpPadSkipped = true end
+end
+UI.SkipInGamepadNav = SkipInGamepadNav
+
 local function AnchorPanel(p, form)
 	local wasMode = p.cpMode
+	SkipInGamepadNav(p)
+	SkipInGamepadNav(p.cpDock)
 	UI:PlaceSlotLines(form) -- reagents may have moved (ForeverRecipes re-lays them out after us)
 	if PlaceBelowContent(p, form, PANEL_HEIGHT, { modes = true, dockFrame = DockFrame, side = CP.settings.panelDock }) then
 		p.cpStretch = false
